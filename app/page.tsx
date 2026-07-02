@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useInView } from 'framer-motion';
+import { AnimatePresence, motion, useInView } from 'framer-motion';
+import { FireButton, Joystick } from '@/components/game/touch-controls';
 
 const navItems = ['Home', 'Play', 'About', 'Controls'];
 
@@ -17,7 +18,7 @@ const controls = [
   ['S', 'Move Down'],
   ['D', 'Move Right'],
   ['Mouse', 'Aim'],
-  ['Left Click', 'Shoot'],
+  ['Left Click', 'Tap or Hold to Fire'],
 ];
 
 function useParallax() {
@@ -33,6 +34,15 @@ function useParallax() {
   return scrollY;
 }
 
+type EnginePhase = 'playing' | 'wave-clear' | 'gameover' | 'victory';
+
+interface PhaseUpdate {
+  phase: EnginePhase;
+  wave?: number;
+  kills?: number;
+  message?: string;
+}
+
 export default function HomePage() {
   const scrollY = useParallax();
   const aboutRef = useRef(null);
@@ -42,6 +52,11 @@ export default function HomePage() {
   const [muted, setMuted] = useState(false);
   const [gameReady, setGameReady] = useState(false);
   const [navVisible, setNavVisible] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [phase, setPhase] = useState<EnginePhase>('playing');
+  const [waveMessage, setWaveMessage] = useState('WOW!!');
+  const [waveNumber, setWaveNumber] = useState(1);
+  const [finalKills, setFinalKills] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gameRef = useRef<GameEngine | null>(null);
 
@@ -54,10 +69,18 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    const engine = new GameEngine(canvasRef.current, muted);
+    const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+    setIsTouchDevice(touch);
+    const engine = new GameEngine(canvasRef.current, muted, touch, (update: PhaseUpdate) => {
+      setPhase(update.phase);
+      if (update.message) setWaveMessage(update.message);
+      if (update.wave) setWaveNumber(update.wave);
+      if (typeof update.kills === 'number') setFinalKills(update.kills);
+    });
     gameRef.current = engine;
     setGameReady(true);
     return () => engine.dispose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -65,6 +88,10 @@ export default function HomePage() {
   }, [muted]);
 
   const heroOffset = useMemo(() => scrollY * 0.2, [scrollY]);
+
+  const handleRestart = () => {
+    gameRef.current?.restart();
+  };
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-transparent text-slate-100">
@@ -161,6 +188,9 @@ export default function HomePage() {
             </motion.div>
           ))}
         </div>
+        <p className="mt-8 text-center text-sm uppercase tracking-[0.3em] text-slate-400">
+          On mobile, drag the on-screen joystick to move and hold the fire button to shoot.
+        </p>
       </section>
 
       <section id="play" className="mx-auto max-w-7xl px-6 pb-24 lg:px-8">
@@ -169,9 +199,105 @@ export default function HomePage() {
           <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">A fully playable top-down survival shooter built directly in Canvas.</h2>
         </motion.div>
         <div className="rounded-[2rem] border border-cyan-400/20 bg-slate-950/70 p-3 shadow-[0_0_40px_rgba(34,211,238,0.16)] backdrop-blur-2xl">
-          <canvas ref={canvasRef} width={960} height={640} className="h-full w-full rounded-[1.5rem] border border-white/10 bg-slate-950" />
+          <div className="relative overflow-hidden rounded-[1.5rem]">
+            <canvas ref={canvasRef} width={960} height={640} className="h-full w-full rounded-[1.5rem] border border-white/10 bg-slate-950" />
+
+            {isTouchDevice && phase === 'playing' && (
+              <>
+                <Joystick onMove={(x, y) => gameRef.current?.setVirtualMove(x, y)} />
+                <FireButton
+                  onFireStart={() => gameRef.current?.setVirtualFire(true)}
+                  onFireEnd={() => gameRef.current?.setVirtualFire(false)}
+                />
+              </>
+            )}
+
+            <AnimatePresence>
+              {phase === 'wave-clear' && (
+                <motion.div
+                  key="wave-clear"
+                  initial={{ opacity: 0, scale: 0.6 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.6 }}
+                  transition={{ duration: 0.35, ease: 'backOut' }}
+                  className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/30"
+                >
+                  <motion.p
+                    animate={{ scale: [1, 1.15, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity }}
+                    className="text-6xl font-black uppercase tracking-widest text-cyan-300 drop-shadow-[0_0_30px_rgba(34,211,238,0.8)] sm:text-7xl"
+                  >
+                    {waveMessage}
+                  </motion.p>
+                  <p className="mt-4 text-lg uppercase tracking-[0.4em] text-white/80">Wave {waveNumber} cleared</p>
+                </motion.div>
+              )}
+
+              {phase === 'gameover' && (
+                <motion.div
+                  key="gameover"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-red-950/60 backdrop-blur-sm"
+                >
+                  <motion.h2
+                    initial={{ scale: 2, opacity: 0, rotate: -6 }}
+                    animate={{ scale: 1, opacity: 1, rotate: [-4, 4, -2, 2, 0] }}
+                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                    className="text-7xl font-black uppercase tracking-[0.2em] text-red-500 drop-shadow-[0_0_40px_rgba(239,68,68,0.8)] sm:text-8xl"
+                  >
+                    Wasted
+                  </motion.h2>
+                  <p className="mt-4 text-sm uppercase tracking-[0.3em] text-red-200">
+                    Reached wave {waveNumber} · {finalKills} kills
+                  </p>
+                  <button
+                    onClick={handleRestart}
+                    className="mt-8 rounded-full border border-red-400/50 bg-red-500/20 px-8 py-3 font-semibold uppercase tracking-[0.3em] text-red-100 transition duration-300 hover:scale-105 hover:bg-red-500/30"
+                  >
+                    Try Again
+                  </button>
+                </motion.div>
+              )}
+
+              {phase === 'victory' && (
+                <motion.div
+                  key="victory"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-sm"
+                >
+                  <motion.h2
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.5, ease: 'backOut' }}
+                    className="text-6xl font-black uppercase tracking-[0.2em] text-cyan-200 drop-shadow-[0_0_36px_rgba(34,211,238,0.8)] sm:text-7xl"
+                  >
+                    Mission Complete
+                  </motion.h2>
+                  <p className="mt-4 text-sm uppercase tracking-[0.3em] text-cyan-100/80">
+                    You survived all three waves · {finalKills} kills
+                  </p>
+                  <button
+                    onClick={handleRestart}
+                    className="mt-8 rounded-full border border-cyan-300/50 bg-cyan-400/20 px-8 py-3 font-semibold uppercase tracking-[0.3em] text-cyan-100 transition duration-300 hover:scale-105 hover:bg-cyan-400/30"
+                  >
+                    Play Again
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-        <p className="mt-4 text-center text-sm text-slate-400">Use WASD to move, aim with your mouse, and hold left click to fire. Survive all three waves.</p>
+        <p className="mt-4 text-center text-sm text-slate-400">
+          {isTouchDevice
+            ? 'Drag the joystick to move and hold the fire button to shoot. Survive all three waves.'
+            : 'Use WASD to move, aim with your mouse, and tap or hold left click to fire. Survive all three waves.'}
+        </p>
         <div className="mt-6 text-center text-sm text-slate-400">{gameReady ? 'Game engine is live.' : 'Loading game engine...'}</div>
       </section>
     </main>
@@ -186,8 +312,14 @@ class GameEngine {
   private lastTime = 0;
   private animationFrame = 0;
   private muted = false;
+  private isTouch: boolean;
+  private onPhaseChange: (update: PhaseUpdate) => void;
   private keys = new Set<string>();
   private mouse = { x: 0, y: 0, down: false };
+  private virtualMove = { x: 0, y: 0 };
+  private virtualFire = false;
+  private fireCooldown = 0;
+  private audioUnlocked = false;
   private bullets: Bullet[] = [];
   private enemies: Enemy[] = [];
   private particles: Particle[] = [];
@@ -198,11 +330,13 @@ class GameEngine {
   private waveTimer = 0;
   private wavePhase = 'spawn';
   private spawnCooldown = 0;
+  private spawnedThisWave = 0;
   private gameOver = false;
   private victory = false;
   private shake = 0;
-  private cameraOffset = { x: 0, y: 0 };
   private audioContext: AudioContext | null = null;
+  private wastedSource: AudioBufferSourceNode | null = null;
+  private readonly waveMessages = ['WOW!!', 'AMAZING!!', 'INCREDIBLE!!', 'UNSTOPPABLE!!', 'BRUTAL!!'];
   private readonly sounds = {
     shoot: null as AudioBuffer | null,
     enemyHit: null as AudioBuffer | null,
@@ -211,14 +345,17 @@ class GameEngine {
     gameOver: null as AudioBuffer | null,
     hover: null as AudioBuffer | null,
     hurt: null as AudioBuffer | null,
+    wasted: null as AudioBuffer | null,
   };
 
-  constructor(canvas: HTMLCanvasElement, muted: boolean) {
+  constructor(canvas: HTMLCanvasElement, muted: boolean, isTouch: boolean, onPhaseChange: (update: PhaseUpdate) => void) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.width = canvas.width;
     this.height = canvas.height;
     this.muted = muted;
+    this.isTouch = isTouch;
+    this.onPhaseChange = onPhaseChange;
     this.player = new Player(this.width / 2, this.height / 2);
     this.bindEvents();
     this.initAudio();
@@ -230,18 +367,40 @@ class GameEngine {
     this.muted = muted;
   }
 
+  setVirtualMove(x: number, y: number) {
+    this.virtualMove.x = x;
+    this.virtualMove.y = y;
+    this.unlockAudio();
+  }
+
+  setVirtualFire(down: boolean) {
+    this.virtualFire = down;
+    if (down) this.unlockAudio();
+  }
+
+  restart() {
+    this.unlockAudio();
+    this.stopWastedLoop();
+    this.resetGame();
+    this.onPhaseChange({ phase: 'playing' });
+  }
+
   dispose() {
     cancelAnimationFrame(this.animationFrame);
+    this.stopWastedLoop();
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
     this.canvas.removeEventListener('mousedown', this.handleMouseDown);
+    this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
     window.removeEventListener('mouseup', this.handleMouseUp);
+    this.audioContext?.close().catch(() => undefined);
   }
 
   private handleKeyDown = (event: KeyboardEvent) => {
     this.keys.add(event.key.toLowerCase());
     if (event.key === ' ') event.preventDefault();
+    this.unlockAudio();
   };
   private handleKeyUp = (event: KeyboardEvent) => {
     this.keys.delete(event.key.toLowerCase());
@@ -251,11 +410,17 @@ class GameEngine {
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * this.width;
     this.mouse.y = ((event.clientY - rect.top) / rect.height) * this.height;
   };
-  private handleMouseDown = () => {
+  private handleMouseDown = (event: MouseEvent) => {
+    if (event.button !== 0) return;
     this.mouse.down = true;
+    this.unlockAudio();
   };
-  private handleMouseUp = () => {
+  private handleMouseUp = (event: MouseEvent) => {
+    if (event.button !== 0) return;
     this.mouse.down = false;
+  };
+  private handleContextMenu = (event: MouseEvent) => {
+    event.preventDefault();
   };
 
   private bindEvents() {
@@ -263,7 +428,16 @@ class GameEngine {
     window.addEventListener('keyup', this.handleKeyUp);
     this.canvas.addEventListener('mousemove', this.handleMouseMove);
     this.canvas.addEventListener('mousedown', this.handleMouseDown);
+    this.canvas.addEventListener('contextmenu', this.handleContextMenu);
     window.addEventListener('mouseup', this.handleMouseUp);
+  }
+
+  private unlockAudio() {
+    if (this.audioUnlocked || !this.audioContext) return;
+    this.audioUnlocked = true;
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume().catch(() => undefined);
+    }
   }
 
   private initAudio() {
@@ -278,6 +452,7 @@ class GameEngine {
     this.sounds.gameOver = this.createTone(120, 0.18, 0.05);
     this.sounds.hover = this.createTone(520, 0.03, 0.01);
     this.sounds.hurt = this.createTone(180, 0.08, 0.08);
+    this.sounds.wasted = this.createSiren();
   }
 
   private createTone(frequency: number, duration: number, volume: number): AudioBuffer | null {
@@ -287,6 +462,20 @@ class GameEngine {
     for (let i = 0; i < buffer.length; i++) {
       const t = i / buffer.sampleRate;
       data[i] = Math.sin(2 * Math.PI * frequency * t) * Math.exp(-4 * t) * volume;
+    }
+    return buffer;
+  }
+
+  private createSiren(): AudioBuffer | null {
+    if (!this.audioContext) return null;
+    const duration = 1.4;
+    const buffer = this.audioContext.createBuffer(1, this.audioContext.sampleRate * duration, this.audioContext.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < buffer.length; i += 1) {
+      const t = i / buffer.sampleRate;
+      const freq = 200 + Math.sin(t * Math.PI * 2 * 1.1) * 70;
+      const envelope = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.1 - Math.PI / 2);
+      data[i] = Math.sin(2 * Math.PI * freq * t) * 0.22 * envelope;
     }
     return buffer;
   }
@@ -302,6 +491,50 @@ class GameEngine {
     source.start();
   }
 
+  private playToneImmediate(frequency: number, duration: number, volume: number) {
+    if (this.muted || !this.audioContext) return;
+    const buffer = this.createTone(frequency, duration, volume);
+    if (!buffer) return;
+    const source = this.audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.audioContext.destination);
+    source.start();
+  }
+
+  private playCelebration() {
+    if (this.muted || !this.audioContext) return;
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, index) => {
+      setTimeout(() => this.playToneImmediate(freq, 0.18, 0.05), index * 80);
+    });
+  }
+
+  private startWastedLoop() {
+    if (this.muted || !this.audioContext || !this.sounds.wasted) return;
+    this.stopWastedLoop();
+    const source = this.audioContext.createBufferSource();
+    const gain = this.audioContext.createGain();
+    source.buffer = this.sounds.wasted;
+    source.loop = true;
+    gain.gain.value = 0.16;
+    source.connect(gain);
+    gain.connect(this.audioContext.destination);
+    source.start();
+    this.wastedSource = source;
+  }
+
+  private stopWastedLoop() {
+    if (this.wastedSource) {
+      try {
+        this.wastedSource.stop();
+      } catch {
+        // already stopped
+      }
+      this.wastedSource.disconnect();
+      this.wastedSource = null;
+    }
+  }
+
   private loop(timestamp: number) {
     const delta = Math.min((timestamp - this.lastTime) / 1000 || 0.016, 0.033);
     this.lastTime = timestamp;
@@ -313,23 +546,71 @@ class GameEngine {
   private update(delta: number) {
     this.timeSurvived += delta;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - delta * 10);
+    if (this.fireCooldown > 0) this.fireCooldown -= delta;
     if (!this.gameOver && !this.victory) {
-      this.player.update(this.keys, this.mouse, delta, this.width, this.height);
-      if (this.mouse.down) {
+      this.player.update(this.moveVector(), delta, this.width, this.height);
+      if (this.isFiring() && this.fireCooldown <= 0) {
         this.shoot();
+        this.fireCooldown = 0.11;
       }
       this.updateEnemies(delta);
       this.updateBullets(delta);
-      this.updateParticles(delta);
       this.updateWave(delta);
     }
+    this.updateParticles(delta);
+  }
+
+  private isFiring() {
+    return this.mouse.down || this.virtualFire;
+  }
+
+  private moveVector(): { x: number; y: number } {
+    let dx = 0;
+    let dy = 0;
+    if (this.keys.has('w')) dy -= 1;
+    if (this.keys.has('a')) dx -= 1;
+    if (this.keys.has('s')) dy += 1;
+    if (this.keys.has('d')) dx += 1;
+    if (dx !== 0 || dy !== 0) return { x: dx, y: dy };
+    return { x: this.virtualMove.x, y: this.virtualMove.y };
+  }
+
+  private nearestEnemy(): Enemy | null {
+    let best: Enemy | null = null;
+    let bestDist = Infinity;
+    for (const enemy of this.enemies) {
+      const dist = enemy.distanceToPlayer(this.player);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = enemy;
+      }
+    }
+    return best;
+  }
+
+  private getAimPoint(): { x: number; y: number } {
+    if (this.isTouch) {
+      const nearest = this.nearestEnemy();
+      if (nearest) return { x: nearest.x, y: nearest.y };
+      const move = this.moveVector();
+      if (move.x !== 0 || move.y !== 0) {
+        const len = Math.hypot(move.x, move.y) || 1;
+        return { x: this.player.x + (move.x / len) * 100, y: this.player.y + (move.y / len) * 100 };
+      }
+      return { x: this.player.x + 100, y: this.player.y };
+    }
+    return this.mouse;
   }
 
   private updateWave(delta: number) {
-    if (this.enemies.length === 0 && this.wavePhase === 'spawn') {
+    if (this.wavePhase === 'spawn' && this.spawnedThisWave >= this.targetCount() && this.enemies.length === 0) {
       this.wavePhase = 'clear';
-      this.waveTimer = 1.4;
+      this.waveTimer = 2;
+      const message = this.waveMessages[Math.floor(Math.random() * this.waveMessages.length)];
       this.playSound('waveClear');
+      this.playCelebration();
+      this.spawnCelebrationBurst();
+      this.onPhaseChange({ phase: 'wave-clear', wave: this.wave, message });
     }
 
     if (this.wavePhase === 'clear') {
@@ -338,35 +619,40 @@ class GameEngine {
         if (this.wave >= 3) {
           this.victory = true;
           this.playSound('victory');
+          this.onPhaseChange({ phase: 'victory', wave: this.wave, kills: this.kills });
           return;
         }
         this.wave += 1;
         this.wavePhase = 'spawn';
-        this.spawnCooldown = 0.3;
         this.spawnWave();
+        this.onPhaseChange({ phase: 'playing' });
       }
     }
 
     if (this.wavePhase === 'spawn') {
       this.spawnCooldown -= delta;
-      if (this.spawnCooldown <= 0 && this.enemies.length < this.targetCount()) {
+      if (this.spawnCooldown <= 0 && this.spawnedThisWave < this.targetCount()) {
         this.spawnEnemy();
-        this.spawnCooldown = 0.4;
+        this.spawnedThisWave += 1;
+        this.spawnCooldown = this.spawnInterval();
       }
     }
   }
 
   private targetCount() {
-    if (this.wave === 1) return 5;
-    if (this.wave === 2) return 10;
-    return 16;
+    if (this.wave === 1) return 50;
+    if (this.wave === 2) return 100;
+    return 200;
+  }
+
+  private spawnInterval() {
+    return Math.max(0.03, 10 / this.targetCount());
   }
 
   private spawnWave() {
     this.enemies = [];
-    for (let i = 0; i < this.targetCount(); i += 1) {
-      this.spawnEnemy();
-    }
+    this.spawnedThisWave = 0;
+    this.spawnCooldown = 0.2;
   }
 
   private spawnEnemy() {
@@ -392,7 +678,8 @@ class GameEngine {
 
   private shoot() {
     if (this.gameOver || this.victory) return;
-    const angle = Math.atan2(this.mouse.y - this.player.y, this.mouse.x - this.player.x);
+    const aim = this.getAimPoint();
+    const angle = Math.atan2(aim.y - this.player.y, aim.x - this.player.x);
     this.bullets.push(new Bullet(this.player.x, this.player.y, angle, 430, this.player.shootColor));
     this.shake = 0.15;
     this.playSound('shoot');
@@ -434,9 +721,11 @@ class GameEngine {
         }
       }
     }
-    if (this.player.health <= 0) {
+    if (this.player.health <= 0 && !this.gameOver) {
       this.gameOver = true;
       this.playSound('gameOver');
+      this.startWastedLoop();
+      this.onPhaseChange({ phase: 'gameover', wave: this.wave, kills: this.kills });
     }
   }
 
@@ -460,6 +749,14 @@ class GameEngine {
     }
   }
 
+  private spawnCelebrationBurst() {
+    const colors = ['#fbbf24', '#22d3ee', '#f472b6', '#a3e635'];
+    for (let i = 0; i < 50; i += 1) {
+      const x = Math.random() * this.width;
+      this.particles.push(new Particle(x, -20, colors[i % colors.length], { speed: 60, life: 1.8, gravity: 140 }));
+    }
+  }
+
   private render() {
     this.ctx.clearRect(0, 0, this.width, this.height);
     this.ctx.save();
@@ -469,20 +766,14 @@ class GameEngine {
 
     this.renderBackground();
     this.renderGrid();
-    this.player.render(this.ctx, this.mouse.x, this.mouse.y);
+    const aim = this.getAimPoint();
+    this.player.render(this.ctx, aim.x, aim.y);
     for (const bullet of this.bullets) bullet.render(this.ctx);
     for (const enemy of this.enemies) enemy.render(this.ctx);
     for (const particle of this.particles) particle.render(this.ctx);
 
     this.renderHud();
     this.ctx.restore();
-
-    if (this.gameOver) {
-      this.renderOverlay('GAME OVER', 'Try Again', () => this.resetGame());
-    }
-    if (this.victory) {
-      this.renderOverlay('MISSION COMPLETE', 'You survived all three waves.', () => this.resetGame());
-    }
   }
 
   private resetGame() {
@@ -495,7 +786,7 @@ class GameEngine {
     this.timeSurvived = 0;
     this.waveTimer = 0;
     this.wavePhase = 'spawn';
-    this.spawnCooldown = 0.3;
+    this.fireCooldown = 0;
     this.gameOver = false;
     this.victory = false;
     this.shake = 0;
@@ -573,30 +864,9 @@ class GameEngine {
     this.ctx.fillStyle = '#cbd5e1';
     this.ctx.fillText('Mini Controls', 34, this.height - 60);
     this.ctx.font = '12px Arial';
-    this.ctx.fillText('WASD Move', 34, this.height - 40);
-    this.ctx.fillText('Mouse Aim / Click Shoot', 34, this.height - 20);
+    this.ctx.fillText(this.isTouch ? 'Joystick Move' : 'WASD Move', 34, this.height - 40);
+    this.ctx.fillText(this.isTouch ? 'Auto-Aim / Fire Button' : 'Mouse Aim / Click Shoot', 34, this.height - 20);
     this.ctx.restore();
-  }
-
-  private renderOverlay(title: string, subtitle: string, onRestart: () => void) {
-    this.ctx.save();
-    this.ctx.fillStyle = 'rgba(2,6,23,0.72)';
-    this.ctx.fillRect(0, 0, this.width, this.height);
-    this.ctx.textAlign = 'center';
-    this.ctx.fillStyle = '#f8fafc';
-    this.ctx.font = 'bold 48px Arial';
-    this.ctx.fillText(title, this.width / 2, this.height / 2 - 24);
-    this.ctx.font = '20px Arial';
-    this.ctx.fillStyle = '#cbd5e1';
-    this.ctx.fillText(subtitle, this.width / 2, this.height / 2 + 18);
-    this.ctx.font = '16px Arial';
-    this.ctx.fillStyle = '#22d3ee';
-    this.ctx.fillText('Click to restart', this.width / 2, this.height / 2 + 56);
-    this.ctx.restore();
-
-    this.canvas.onclick = () => {
-      onRestart();
-    };
   }
 }
 
@@ -612,24 +882,22 @@ class Player {
     this.y = y;
   }
 
-  update(keys: Set<string>, mouse: { x: number; y: number }, delta: number, width: number, height: number) {
-    let dx = 0;
-    let dy = 0;
-    if (keys.has('w')) dy -= 1;
-    if (keys.has('a')) dx -= 1;
-    if (keys.has('s')) dy += 1;
-    if (keys.has('d')) dx += 1;
-    const len = Math.hypot(dx, dy) || 1;
-    dx /= len;
-    dy /= len;
+  update(move: { x: number; y: number }, delta: number, width: number, height: number) {
+    let dx = move.x;
+    let dy = move.y;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) {
+      dx /= len;
+      dy /= len;
+    }
     this.x += dx * this.speed * delta;
     this.y += dy * this.speed * delta;
     this.x = Math.max(20, Math.min(width - 20, this.x));
     this.y = Math.max(20, Math.min(height - 20, this.y));
   }
 
-  render(ctx: CanvasRenderingContext2D, mouseX: number, mouseY: number) {
-    const angle = Math.atan2(mouseY - this.y, mouseX - this.x);
+  render(ctx: CanvasRenderingContext2D, aimX: number, aimY: number) {
+    const angle = Math.atan2(aimY - this.y, aimX - this.x);
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(angle);
@@ -735,33 +1003,49 @@ class Bullet {
   }
 }
 
+interface ParticleOptions {
+  speed?: number;
+  life?: number;
+  gravity?: number;
+}
+
 class Particle {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  life = 0.45;
+  life: number;
+  maxLife: number;
+  gravity: number;
   color: string;
 
-  constructor(x: number, y: number, color: string) {
+  constructor(x: number, y: number, color: string, options?: ParticleOptions) {
     this.x = x;
     this.y = y;
-    this.vx = (Math.random() - 0.5) * 220;
-    this.vy = (Math.random() - 0.5) * 220;
+    const speed = options?.speed ?? 220;
+    this.vx = (Math.random() - 0.5) * speed;
+    this.vy = (Math.random() - 0.5) * speed;
+    this.life = options?.life ?? 0.45;
+    this.maxLife = this.life;
+    this.gravity = options?.gravity ?? 0;
     this.color = color;
   }
 
   update(delta: number) {
     this.x += this.vx * delta;
     this.y += this.vy * delta;
-    this.vx *= 0.92;
-    this.vy *= 0.92;
+    if (this.gravity) {
+      this.vy += this.gravity * delta;
+    } else {
+      this.vx *= 0.92;
+      this.vy *= 0.92;
+    }
     this.life -= delta;
   }
 
   render(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    ctx.globalAlpha = Math.max(0, this.life / 0.45);
+    ctx.globalAlpha = Math.max(0, Math.min(1, this.life / this.maxLife));
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, 2.5, 0, Math.PI * 2);
