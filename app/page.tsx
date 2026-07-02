@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useInView } from 'framer-motion';
-import { FireButton, Joystick } from '@/components/game/touch-controls';
+import { FireStick, Joystick } from '@/components/game/touch-controls';
 
 const navItems = ['Home', 'Play', 'About', 'Controls'];
 
@@ -189,23 +189,24 @@ export default function HomePage() {
           ))}
         </div>
         <p className="mt-8 text-center text-sm uppercase tracking-[0.3em] text-slate-400">
-          On mobile, drag the on-screen joystick to move and hold the fire button to shoot.
+          On mobile, drag the left stick to move and the right stick to aim and fire in any direction.
         </p>
       </section>
 
-      <section id="play" className="mx-auto max-w-7xl px-6 pb-24 lg:px-8">
+      <section id="play" className="mx-auto max-w-7xl px-2 pb-24 sm:px-6 lg:px-8">
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6 }} className="mb-8 text-center">
           <p className="text-sm uppercase tracking-[0.4em] text-cyan-300">Playable mission</p>
           <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">A fully playable top-down survival shooter built directly in Canvas.</h2>
         </motion.div>
-        <div className="rounded-[2rem] border border-cyan-400/20 bg-slate-950/70 p-3 shadow-[0_0_40px_rgba(34,211,238,0.16)] backdrop-blur-2xl">
-          <div className="relative overflow-hidden rounded-[1.5rem]">
-            <canvas ref={canvasRef} width={960} height={640} className="h-full w-full rounded-[1.5rem] border border-white/10 bg-slate-950" />
+        <div className="rounded-xl border border-cyan-400/20 bg-slate-950/70 p-1 shadow-[0_0_40px_rgba(34,211,238,0.16)] backdrop-blur-2xl sm:rounded-[2rem] sm:p-3">
+          <div className="relative overflow-hidden rounded-lg sm:rounded-[1.5rem]">
+            <canvas ref={canvasRef} width={960} height={640} className="h-full w-full rounded-lg border border-white/10 bg-slate-950 sm:rounded-[1.5rem]" />
 
             {isTouchDevice && phase === 'playing' && (
               <>
                 <Joystick onMove={(x, y) => gameRef.current?.setVirtualMove(x, y)} />
-                <FireButton
+                <FireStick
+                  onAim={(x, y) => gameRef.current?.setVirtualAim(x, y)}
                   onFireStart={() => gameRef.current?.setVirtualFire(true)}
                   onFireEnd={() => gameRef.current?.setVirtualFire(false)}
                 />
@@ -282,6 +283,18 @@ export default function HomePage() {
                   <p className="mt-4 text-sm uppercase tracking-[0.3em] text-cyan-100/80">
                     You survived all three waves · {finalKills} kills
                   </p>
+                  <motion.a
+                    href="https://youtu.be/dQw4w9WgXcQ"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0, scale: [1, 1.06, 1] }}
+                    transition={{ opacity: { delay: 0.4, duration: 0.5 }, y: { delay: 0.4, duration: 0.5 }, scale: { delay: 1, duration: 1.6, repeat: Infinity } }}
+                    whileHover={{ scale: 1.1 }}
+                    className="mt-8 bg-gradient-to-r from-fuchsia-400 via-purple-400 to-violet-500 bg-clip-text font-serif text-3xl font-black italic tracking-wide text-transparent drop-shadow-[0_0_25px_rgba(168,85,247,0.85)] sm:text-4xl"
+                  >
+                    ✨ CONGRATS BY NomanOnline AKA Nomay ✨
+                  </motion.a>
                   <button
                     onClick={handleRestart}
                     className="mt-8 rounded-full border border-cyan-300/50 bg-cyan-400/20 px-8 py-3 font-semibold uppercase tracking-[0.3em] text-cyan-100 transition duration-300 hover:scale-105 hover:bg-cyan-400/30"
@@ -295,7 +308,7 @@ export default function HomePage() {
         </div>
         <p className="mt-4 text-center text-sm text-slate-400">
           {isTouchDevice
-            ? 'Drag the joystick to move and hold the fire button to shoot. Survive all three waves.'
+            ? 'Drag the left stick to move and the right stick to aim and fire in any direction. Survive all three waves.'
             : 'Use WASD to move, aim with your mouse, and tap or hold left click to fire. Survive all three waves.'}
         </p>
         <div className="mt-6 text-center text-sm text-slate-400">{gameReady ? 'Game engine is live.' : 'Loading game engine...'}</div>
@@ -317,6 +330,7 @@ class GameEngine {
   private keys = new Set<string>();
   private mouse = { x: 0, y: 0, down: false };
   private virtualMove = { x: 0, y: 0 };
+  private virtualAim = { x: 1, y: 0 };
   private virtualFire = false;
   private fireCooldown = 0;
   private audioUnlocked = false;
@@ -371,6 +385,11 @@ class GameEngine {
     this.virtualMove.x = x;
     this.virtualMove.y = y;
     this.unlockAudio();
+  }
+
+  setVirtualAim(x: number, y: number) {
+    this.virtualAim.x = x;
+    this.virtualAim.y = y;
   }
 
   setVirtualFire(down: boolean) {
@@ -575,29 +594,9 @@ class GameEngine {
     return { x: this.virtualMove.x, y: this.virtualMove.y };
   }
 
-  private nearestEnemy(): Enemy | null {
-    let best: Enemy | null = null;
-    let bestDist = Infinity;
-    for (const enemy of this.enemies) {
-      const dist = enemy.distanceToPlayer(this.player);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = enemy;
-      }
-    }
-    return best;
-  }
-
   private getAimPoint(): { x: number; y: number } {
     if (this.isTouch) {
-      const nearest = this.nearestEnemy();
-      if (nearest) return { x: nearest.x, y: nearest.y };
-      const move = this.moveVector();
-      if (move.x !== 0 || move.y !== 0) {
-        const len = Math.hypot(move.x, move.y) || 1;
-        return { x: this.player.x + (move.x / len) * 100, y: this.player.y + (move.y / len) * 100 };
-      }
-      return { x: this.player.x + 100, y: this.player.y };
+      return { x: this.player.x + this.virtualAim.x * 100, y: this.player.y + this.virtualAim.y * 100 };
     }
     return this.mouse;
   }
@@ -648,7 +647,7 @@ class GameEngine {
   private targetCount() {
     if (this.wave === 1) return 50;
     if (this.wave === 2) return 100;
-    return 200;
+    return 175;
   }
 
   private batchInterval() {
@@ -870,8 +869,8 @@ class GameEngine {
     this.ctx.fillStyle = '#cbd5e1';
     this.ctx.fillText('Mini Controls', 34, this.height - 60);
     this.ctx.font = '12px Arial';
-    this.ctx.fillText(this.isTouch ? 'Joystick Move' : 'WASD Move', 34, this.height - 40);
-    this.ctx.fillText(this.isTouch ? 'Auto-Aim / Fire Button' : 'Mouse Aim / Click Shoot', 34, this.height - 20);
+    this.ctx.fillText(this.isTouch ? 'Left Stick Move' : 'WASD Move', 34, this.height - 40);
+    this.ctx.fillText(this.isTouch ? 'Right Stick Aim & Fire' : 'Mouse Aim / Click Shoot', 34, this.height - 20);
     this.ctx.restore();
   }
 }
