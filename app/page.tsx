@@ -570,7 +570,7 @@ class GameEngine {
       this.player.update(this.moveVector(), delta, this.width, this.height);
       if (this.isFiring() && this.fireCooldown <= 0) {
         this.shoot();
-        this.fireCooldown = 0.045;
+        this.fireCooldown = 0.02;
       }
       this.updateEnemies(delta);
       this.updateBullets(delta);
