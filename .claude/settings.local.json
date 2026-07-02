@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); gh --version)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Write-Output \"GH_CONFIG_DIR=$env:GH_CONFIG_DIR\"; Write-Output \"GH_TOKEN set: $\\([bool]$env:GH_TOKEN\\)\"; Write-Output \"GITHUB_TOKEN set: $\\([bool]$env:GITHUB_TOKEN\\)\"; Test-Path \"$env:APPDATA\\\\GitHub CLI\\\\hosts.yml\")"
+    ]
+  }
+}
