@@ -551,7 +551,7 @@ class GameEngine {
       this.player.update(this.moveVector(), delta, this.width, this.height);
       if (this.isFiring() && this.fireCooldown <= 0) {
         this.shoot();
-        this.fireCooldown = 0.11;
+        this.fireCooldown = 0.045;
       }
       this.updateEnemies(delta);
       this.updateBullets(delta);
@@ -632,12 +632,18 @@ class GameEngine {
     if (this.wavePhase === 'spawn') {
       this.spawnCooldown -= delta;
       if (this.spawnCooldown <= 0 && this.spawnedThisWave < this.targetCount()) {
-        this.spawnEnemy();
-        this.spawnedThisWave += 1;
-        this.spawnCooldown = this.spawnInterval();
+        const remaining = this.targetCount() - this.spawnedThisWave;
+        const batch = Math.min(this.batchSize, remaining);
+        for (let i = 0; i < batch; i += 1) {
+          this.spawnEnemy();
+        }
+        this.spawnedThisWave += batch;
+        this.spawnCooldown = this.batchInterval();
       }
     }
   }
+
+  private readonly batchSize = 10;
 
   private targetCount() {
     if (this.wave === 1) return 50;
@@ -645,14 +651,14 @@ class GameEngine {
     return 200;
   }
 
-  private spawnInterval() {
-    return Math.max(0.03, 10 / this.targetCount());
+  private batchInterval() {
+    return Math.max(1.4, 2.6 - (this.wave - 1) * 0.4);
   }
 
   private spawnWave() {
     this.enemies = [];
     this.spawnedThisWave = 0;
-    this.spawnCooldown = 0.2;
+    this.spawnCooldown = 0.6;
   }
 
   private spawnEnemy() {
