@@ -290,14 +290,17 @@ export default function HomePage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0, scale: [1, 1.06, 1] }}
                     transition={{ opacity: { delay: 0.4, duration: 0.5 }, y: { delay: 0.4, duration: 0.5 }, scale: { delay: 1, duration: 1.6, repeat: Infinity } }}
-                    whileHover={{ scale: 1.1 }}
-                    className="mt-8 bg-gradient-to-r from-fuchsia-400 via-purple-400 to-violet-500 bg-clip-text font-serif text-3xl font-black italic tracking-wide text-transparent drop-shadow-[0_0_25px_rgba(168,85,247,0.85)] sm:text-4xl"
+                    whileHover={{ scale: 1.08 }}
+                    className="mt-8 rounded-full border border-fuchsia-300/60 bg-gradient-to-r from-fuchsia-500/30 via-purple-500/30 to-violet-500/30 px-10 py-4 font-serif text-2xl font-black italic tracking-wide text-transparent shadow-[0_0_30px_rgba(168,85,247,0.6)] backdrop-blur-md sm:text-3xl"
+                    style={{ backgroundClip: 'padding-box' }}
                   >
-                    ✨ CONGRATS BY NomanOnline AKA Nomay ✨
+                    <span className="bg-gradient-to-r from-fuchsia-300 via-purple-200 to-violet-300 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(217,180,255,0.8)]">
+                      🎁 Claim Your Reward
+                    </span>
                   </motion.a>
                   <button
                     onClick={handleRestart}
-                    className="mt-8 rounded-full border border-cyan-300/50 bg-cyan-400/20 px-8 py-3 font-semibold uppercase tracking-[0.3em] text-cyan-100 transition duration-300 hover:scale-105 hover:bg-cyan-400/30"
+                    className="mt-6 rounded-full border border-cyan-300/50 bg-cyan-400/20 px-8 py-3 font-semibold uppercase tracking-[0.3em] text-cyan-100 transition duration-300 hover:scale-105 hover:bg-cyan-400/30"
                   >
                     Play Again
                   </button>
