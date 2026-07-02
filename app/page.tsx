@@ -646,8 +646,8 @@ class GameEngine {
 
   private targetCount() {
     if (this.wave === 1) return 50;
-    if (this.wave === 2) return 100;
-    return 175;
+    if (this.wave === 2) return 75;
+    return 125;
   }
 
   private batchInterval() {
